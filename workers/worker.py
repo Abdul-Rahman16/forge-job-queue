@@ -3,14 +3,17 @@ import signal
 import sys
 
 from core.db import SessionLocal
+from core.logging import configure_logging, log
 from domain.queue import claim_task, complete_task, fail_task
+
+configure_logging()
 
 running = True
 
 
 def handle_shutdown(signum, frame):
     global running
-    print("Shutdown signal received, finishing current task then exiting...")
+    log.info("shutdown_signal_received")
     running = False
 
 
@@ -19,37 +22,33 @@ signal.signal(signal.SIGTERM, handle_shutdown)
 
 
 def process_task(task) -> bool:
-    """
-    Placeholder job logic. Replace this with real work later.
-    Return True on success, False to trigger a retry.
-    """
-    print(f"Processing task {task.id} with payload {task.payload}")
-    time.sleep(1)  # pretend to do work
+    log.info("task_processing", task_id=str(task.id), payload=task.payload)
+    time.sleep(1)
     return True
 
 
 def run_worker():
-    print("Worker started. Polling for tasks...")
+    log.info("worker_started")
     while running:
         db = SessionLocal()
         try:
             task = claim_task(db)
             if task is None:
                 db.close()
-                time.sleep(2)  # nothing to do, wait before polling again
+                time.sleep(2)
                 continue
 
             success = process_task(task)
             if success:
                 complete_task(db, task)
-                print(f"Task {task.id} completed.")
+                log.info("task_completed", task_id=str(task.id))
             else:
                 fail_task(db, task)
-                print(f"Task {task.id} failed, will retry with backoff.")
+                log.warning("task_failed_retrying", task_id=str(task.id))
         finally:
             db.close()
 
-    print("Worker stopped cleanly.")
+    log.info("worker_stopped")
     sys.exit(0)
 
 
