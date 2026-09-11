@@ -1,8 +1,9 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.orm import Session
 from sqlalchemy import select
 
 from core.db import get_db
+from core.limiter import limiter
 from domain.models import Task
 from domain.queue import submit_task
 from api.schemas import TaskSubmitRequest, TaskResponse
@@ -11,7 +12,8 @@ router = APIRouter(prefix="/tasks", tags=["tasks"])
 
 
 @router.post("", response_model=TaskResponse)
-def create_task(req: TaskSubmitRequest, db: Session = Depends(get_db)):
+@limiter.limit("10/minute")
+def create_task(req: TaskSubmitRequest, request: Request, db: Session = Depends(get_db)):
     task = submit_task(db, payload=req.payload, idempotency_key=req.idempotency_key)
     return task
 
