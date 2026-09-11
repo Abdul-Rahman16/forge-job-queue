@@ -4,7 +4,7 @@ from datetime import datetime, timedelta
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from domain.models import Task
+from domain.models import Task, DeadLetter
 
 
 def submit_task(db: Session, payload: dict, idempotency_key: str | None = None) -> Task:
@@ -13,7 +13,7 @@ def submit_task(db: Session, payload: dict, idempotency_key: str | None = None) 
             select(Task).where(Task.idempotency_key == idempotency_key)
         ).scalar_one_or_none()
         if existing:
-            return existing  # idempotent: same key returns the same task, no duplicate
+            return existing
 
     task = Task(
         id=uuid.uuid4(),
@@ -28,13 +28,6 @@ def submit_task(db: Session, payload: dict, idempotency_key: str | None = None) 
 
 
 def claim_task(db: Session) -> Task | None:
-    """
-    Atomically claim the next available task.
-    FOR UPDATE SKIP LOCKED lets multiple workers poll concurrently:
-    each worker locks the row it's checking, and any other worker
-    running this same query simply skips locked rows instead of
-    blocking or double-claiming them.
-    """
     stmt = (
         select(Task)
         .where(Task.status == "pending")
@@ -61,11 +54,19 @@ def complete_task(db: Session, task: Task) -> Task:
     return task
 
 
-def fail_task(db: Session, task: Task, backoff_seconds: int = 30) -> Task:
-    """Retry with exponential backoff; permanently give up after max_attempts."""
+def fail_task(db: Session, task: Task, backoff_seconds: int = 30, reason: str | None = None) -> Task:
+    """Retry with exponential backoff; move to dead_letters table after max_attempts."""
     task.attempts += 1
     if task.attempts >= task.max_attempts:
         task.status = "dead_letter"
+        dead = DeadLetter(
+            id=uuid.uuid4(),
+            task_id=task.id,
+            payload=task.payload,
+            failure_reason=reason,
+            attempts_made=task.attempts,
+        )
+        db.add(dead)
     else:
         task.status = "pending"
         task.run_after = datetime.utcnow() + timedelta(
