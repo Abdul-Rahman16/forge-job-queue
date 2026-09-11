@@ -19,3 +19,14 @@ class TaskResponse(BaseModel):
 
     class Config:
         from_attributes = True
+
+class DeadLetterResponse(BaseModel):
+    id: uuid.UUID
+    task_id: uuid.UUID
+    payload: dict
+    failure_reason: Optional[str]
+    attempts_made: int
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
