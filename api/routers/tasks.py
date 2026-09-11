@@ -18,6 +18,13 @@ def create_task(req: TaskSubmitRequest, request: Request, db: Session = Depends(
     return task
 
 
+@router.get("", response_model=list[TaskResponse])
+def list_tasks(db: Session = Depends(get_db), limit: int = 50):
+    return db.execute(
+        select(Task).order_by(Task.created_at.desc()).limit(limit)
+    ).scalars().all()
+
+
 @router.get("/dead-letters", response_model=list[DeadLetterResponse])
 def list_dead_letters(db: Session = Depends(get_db)):
     return db.execute(select(DeadLetter).order_by(DeadLetter.created_at.desc())).scalars().all()
