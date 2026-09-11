@@ -11,5 +11,28 @@ services:
     volumes:
       - pgdata:/var/lib/postgresql/data
 
+  api:
+    build: .
+    command: uvicorn api.main:app --host 0.0.0.0 --port 8000 --reload
+    ports:
+      - "8000:8000"
+    environment:
+      DATABASE_URL: postgresql://forge:forge@db:5432/forge
+    depends_on:
+      - db
+    volumes:
+      - .:/app
+
+  worker:
+    build: .
+    command: python -m workers.worker
+    environment: 
+      DATABASE_URL: postgresql://forge:forge@db:5432/forge
+      PYTHONUNBUFFERED: 1
+    depends_on:
+      - db
+    volumes:
+      - .:/app
+
 volumes:
   pgdata:
