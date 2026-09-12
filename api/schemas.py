@@ -8,6 +8,7 @@ from pydantic import BaseModel
 class TaskSubmitRequest(BaseModel):
     payload: dict
     idempotency_key: Optional[str] = None
+    submitted_by: Optional[str] = None  # optional identifier, never echoed back
 
 
 class TaskResponse(BaseModel):
@@ -19,6 +20,7 @@ class TaskResponse(BaseModel):
 
     class Config:
         from_attributes = True
+
 
 class DeadLetterResponse(BaseModel):
     id: uuid.UUID

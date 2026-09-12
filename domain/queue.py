@@ -7,7 +7,13 @@ from sqlalchemy.orm import Session
 from domain.models import Task, DeadLetter
 
 
-def submit_task(db: Session, payload: dict, idempotency_key: str | None = None) -> Task:
+def submit_task(
+    db: Session,
+    payload: dict,
+    idempotency_key: str | None = None,
+    submitted_by: str | None = None,
+    submitter_ip: str | None = None,
+) -> Task:
     if idempotency_key:
         existing = db.execute(
             select(Task).where(Task.idempotency_key == idempotency_key)
@@ -20,6 +26,8 @@ def submit_task(db: Session, payload: dict, idempotency_key: str | None = None) 
         status="pending",
         payload=payload,
         idempotency_key=idempotency_key,
+        submitted_by=submitted_by,
+        submitter_ip=submitter_ip,
     )
     db.add(task)
     db.commit()
@@ -55,7 +63,6 @@ def complete_task(db: Session, task: Task) -> Task:
 
 
 def fail_task(db: Session, task: Task, backoff_seconds: int = 30, reason: str | None = None) -> Task:
-    """Retry with exponential backoff; move to dead_letters table after max_attempts."""
     task.attempts += 1
     if task.attempts >= task.max_attempts:
         task.status = "dead_letter"

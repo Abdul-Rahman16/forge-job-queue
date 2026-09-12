@@ -4,6 +4,7 @@ from sqlalchemy import select
 
 from core.db import get_db
 from core.limiter import limiter
+from core.notify import notify_task_submitted
 from domain.models import Task, DeadLetter
 from domain.queue import submit_task
 from api.schemas import TaskSubmitRequest, TaskResponse, DeadLetterResponse
@@ -14,7 +15,15 @@ router = APIRouter(prefix="/tasks", tags=["tasks"])
 @router.post("", response_model=TaskResponse)
 @limiter.limit("10/minute")
 def create_task(req: TaskSubmitRequest, request: Request, db: Session = Depends(get_db)):
-    task = submit_task(db, payload=req.payload, idempotency_key=req.idempotency_key)
+    submitter_ip = request.client.host if request.client else None
+    task = submit_task(
+        db,
+        payload=req.payload,
+        idempotency_key=req.idempotency_key,
+        submitted_by=req.submitted_by,
+        submitter_ip=submitter_ip,
+    )
+    notify_task_submitted(str(task.id), req.submitted_by, submitter_ip)
     return task
 
 
